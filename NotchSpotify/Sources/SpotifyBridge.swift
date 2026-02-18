@@ -393,8 +393,10 @@ final class SpotifyBridge: ObservableObject {
 
         let parsedTitle = parts[1].isEmpty ? "Not Playing" : parts[1]
         let parsedArtist = parts[2].isEmpty ? "Open Spotify" : parts[2]
-        let parsedDuration = max(Double(parts[3]) ?? 1, 1)
-        let parsedPosition = min(max(Double(parts[4]) ?? 0, 0), parsedDuration)
+        let parsedDurationMs = max(Self.parseScriptNumber(parts[3]) ?? 1000, 1000)
+        let parsedPositionMs = max(Self.parseScriptNumber(parts[4]) ?? 0, 0)
+        let parsedDuration = max(parsedDurationMs / 1000.0, 1)
+        let parsedPosition = min(parsedPositionMs / 1000.0, parsedDuration)
         let parsedIsPlaying = parts[5].lowercased() == "true"
         let artURL = parts[6].trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -440,7 +442,7 @@ final class SpotifyBridge: ObservableObject {
         
         applyCurrentEnergyPolicy(track: track)
 
-        let fetchedVolume = min(max(Double(parts[7]) ?? volume, 0), 100)
+        let fetchedVolume = min(max(Self.parseScriptNumber(parts[7]) ?? volume, 0), 100)
         if abs(fetchedVolume - volume) > 0.5 {
             volume = fetchedVolume
         }
@@ -776,15 +778,15 @@ final class SpotifyBridge: ObservableObject {
                 set trackVolume to sound volume
                 set stateText to (player state as text)
                 set trackPlaying to (stateText is "playing")
-                set trackPosition to player position
+                set trackPositionMs to (round ((player position) * 1000)) as integer
 
                 if stateText is "stopped" then
-                    return "IDLE" & sep & "" & sep & "" & sep & 1 & sep & 0 & sep & false & sep & "" & sep & trackVolume
+                    return "IDLE" & sep & "" & sep & "" & sep & 1000 & sep & 0 & sep & false & sep & "" & sep & trackVolume
                 end if
 
                 set trackName to (name of current track as text)
                 set trackArtist to (artist of current track as text)
-                set trackDuration to (duration of current track) / 1000
+                set trackDurationMs to (duration of current track) as integer
                 set trackArtURL to ""
 
                 try
@@ -793,7 +795,7 @@ final class SpotifyBridge: ObservableObject {
                     set trackArtURL to ""
                 end try
 
-                return "OK" & sep & trackName & sep & trackArtist & sep & trackDuration & sep & trackPosition & sep & trackPlaying & sep & trackArtURL & sep & trackVolume
+                return "OK" & sep & trackName & sep & trackArtist & sep & trackDurationMs & sep & trackPositionMs & sep & trackPlaying & sep & trackArtURL & sep & trackVolume
             end tell
         end nsp_read_state
 
@@ -904,6 +906,30 @@ final class SpotifyBridge: ObservableObject {
         let components = result.components(separatedBy: payloadSeparator)
         guard components.count >= 2 else { return nil }
         return components[1]
+    }
+
+    nonisolated private static func parseScriptNumber(_ raw: String) -> Double? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let direct = Double(trimmed) {
+            return direct
+        }
+
+        let normalizedDecimal = trimmed.replacingOccurrences(of: ",", with: ".")
+        if let normalized = Double(normalizedDecimal) {
+            return normalized
+        }
+
+        // Handle occasional non-breaking spaces or grouping artifacts from localized AppleScript output.
+        let compact = normalizedDecimal
+            .replacingOccurrences(of: "\u{00A0}", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        if let compactValue = Double(compact) {
+            return compactValue
+        }
+
+        return nil
     }
 
     nonisolated private static func retryOnErrorCode(
