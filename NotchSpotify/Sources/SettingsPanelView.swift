@@ -71,17 +71,73 @@ struct SettingsPanelView: View {
                                     SettingsCard(title: "ELEMENTOS LATERALES", subtitle: "Vista previa en vivo") {
                                         SideDistanceLivePreview(
                                             artworkImage: spotify.artworkImage,
-                                            sideDistance: settings.sideDistance,
-                                            equalizerColor: settings.equalizerColor,
+                                            artworkDistance: settings.artworkDistance,
+                                            equalizerDistance: settings.equalizerDistance,
+                                            artworkSize: settings.collapsedArtworkSize,
+                                            equalizerScale: settings.collapsedEqualizerScale,
+                                            notchCenterOffsetX: settings.notchCenterOffsetX,
+                                            notchReferenceWidth: settings.activeDisplayNotchWidth,
+                                            equalizerColor: settings.resolvedEqualizerColor(from: spotify.artworkDominantColor),
                                             isPlaying: spotify.currentTrack.isPlaying
                                         )
 
+                                        HStack {
+                                            Text("Pantalla")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.white.opacity(0.6))
+                                            Spacer()
+                                            Text(settings.activeDisplayName)
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundColor(.white.opacity(0.8))
+                                                .lineLimit(1)
+                                        }
+                                        
                                         SettingsSlider(
-                                            label: "Distancia al notch",
-                                            value: $settings.sideDistance,
+                                            label: "Offset centro notch",
+                                            value: $settings.notchCenterOffsetX,
+                                            range: -140...140,
+                                            unit: "px",
+                                            format: "%+.0f"
+                                        )
+                                        
+                                        SettingsSlider(
+                                            label: "Distancia global (ambas)",
+                                            value: combinedSideDistanceBinding,
                                             range: 60...220,
                                             unit: "px",
                                             format: "%.0f"
+                                        )
+
+                                        SettingsSlider(
+                                            label: "Distancia portada",
+                                            value: $settings.artworkDistance,
+                                            range: 60...220,
+                                            unit: "px",
+                                            format: "%.0f"
+                                        )
+                                        
+                                        SettingsSlider(
+                                            label: "Distancia equalizer",
+                                            value: $settings.equalizerDistance,
+                                            range: 60...220,
+                                            unit: "px",
+                                            format: "%.0f"
+                                        )
+
+                                        SettingsSlider(
+                                            label: "Tamaño portada",
+                                            value: $settings.collapsedArtworkSize,
+                                            range: 24...42,
+                                            unit: "px",
+                                            format: "%.0f"
+                                        )
+
+                                        SettingsSlider(
+                                            label: "Tamaño equalizer",
+                                            value: $settings.collapsedEqualizerScale,
+                                            range: 0.75...1.8,
+                                            unit: "x",
+                                            format: "%.2f"
                                         )
                                     }
 
@@ -102,10 +158,33 @@ struct SettingsPanelView: View {
                                             unit: "px",
                                             format: "%.0f"
                                         )
+
+                                        VStack(spacing: 4) {
+                                            HStack {
+                                                Text("Fondo del panel")
+                                                    .font(.system(size: 11))
+                                                    .foregroundColor(.white.opacity(0.6))
+                                                Spacer()
+                                            }
+
+                                            Picker("", selection: $settings.panelBackgroundStyle) {
+                                                Text("Negro").tag(PanelBackgroundStyle.black)
+                                                Text("Glass").tag(PanelBackgroundStyle.glass)
+                                            }
+                                            .pickerStyle(.segmented)
+                                        }
                                     }
 
                                     sectionMarker(.behavior)
                                     SettingsCard(title: "COMPORTAMIENTO") {
+                                        SettingsSlider(
+                                            label: "Delay al hacer hover",
+                                            value: $settings.hoverExpandDelay,
+                                            range: 0.0...1.2,
+                                            unit: "s",
+                                            format: "%.2f"
+                                        )
+                                        
                                         SettingsSlider(
                                             label: "Delay al colapsar",
                                             value: $settings.collapseDelay,
@@ -117,17 +196,36 @@ struct SettingsPanelView: View {
 
                                     sectionMarker(.equalizer)
                                     SettingsCard(title: "EQUALIZER") {
+                                        VStack(spacing: 4) {
+                                            HStack {
+                                                Text("Fuente color")
+                                                    .font(.system(size: 11))
+                                                    .foregroundColor(.white.opacity(0.6))
+                                                Spacer()
+                                            }
+
+                                            Picker("", selection: $settings.equalizerColorMode) {
+                                                Text("Manual").tag(EqualizerColorMode.manual)
+                                                Text("Portada").tag(EqualizerColorMode.artwork)
+                                            }
+                                            .pickerStyle(.segmented)
+                                        }
+
                                         HStack {
-                                            Text("Color")
+                                            Text(settings.equalizerColorMode == .artwork ? "Color fallback" : "Color")
                                                 .font(.system(size: 11))
                                                 .foregroundColor(.white.opacity(0.6))
                                             Spacer()
 
-                                            MiniEqualizerPreview(color: settings.equalizerColor)
+                                            MiniEqualizerPreview(
+                                                color: settings.resolvedEqualizerColor(from: spotify.artworkDominantColor)
+                                            )
 
                                             ColorPicker("", selection: $settings.equalizerColor, supportsOpacity: false)
                                                 .labelsHidden()
                                                 .frame(width: 28, height: 28)
+                                                .disabled(settings.equalizerColorMode == .artwork)
+                                                .opacity(settings.equalizerColorMode == .artwork ? 0.45 : 1)
                                         }
 
                                         HStack(spacing: 8) {
@@ -144,6 +242,14 @@ struct SettingsPanelView: View {
                                                     settings.equalizerColor = preset.color
                                                 }
                                             }
+                                        }
+                                        .disabled(settings.equalizerColorMode == .artwork)
+                                        .opacity(settings.equalizerColorMode == .artwork ? 0.45 : 1)
+
+                                        if settings.equalizerColorMode == .artwork {
+                                            Text("Usa el color dominante de la portada. Si no hay portada, usa el fallback.")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.white.opacity(0.42))
                                         }
                                     }
 
@@ -172,7 +278,9 @@ struct SettingsPanelView: View {
                         }
                     }
                     .onPreferenceChange(SettingsSectionOffsetKey.self) { values in
-                        if let nearest = values.min(by: { abs($0.value) < abs($1.value) })?.key {
+                        guard let nearest = values.min(by: { abs($0.value) < abs($1.value) })?.key else { return }
+                        guard nearest != activeSection else { return }
+                        DispatchQueue.main.async {
                             activeSection = nearest
                         }
                     }
@@ -222,6 +330,22 @@ struct SettingsPanelView: View {
 
     private func isColorSelected(_ color: Color) -> Bool {
         NSColor(color).isApproximatelyEqual(to: NSColor(settings.equalizerColor))
+    }
+    
+    private var combinedSideDistanceBinding: Binding<CGFloat> {
+        Binding(
+            get: {
+                (settings.artworkDistance + settings.equalizerDistance) * 0.5
+            },
+            set: { newValue in
+                let clamped = min(max(newValue, 60), 220)
+                let currentAverage = (settings.artworkDistance + settings.equalizerDistance) * 0.5
+                let delta = clamped - currentAverage
+                
+                settings.artworkDistance = min(max(settings.artworkDistance + delta, 60), 220)
+                settings.equalizerDistance = min(max(settings.equalizerDistance + delta, 60), 220)
+            }
+        )
     }
 }
 
@@ -359,37 +483,73 @@ private struct SettingsCard<Content: View>: View {
 
 private struct SideDistanceLivePreview: View {
     let artworkImage: NSImage?
-    let sideDistance: CGFloat
+    let artworkDistance: CGFloat
+    let equalizerDistance: CGFloat
+    let artworkSize: CGFloat
+    let equalizerScale: CGFloat
+    let notchCenterOffsetX: CGFloat
+    let notchReferenceWidth: CGFloat
     let equalizerColor: Color
     let isPlaying: Bool
 
     var body: some View {
         GeometryReader { geo in
-            let centerX = geo.size.width * 0.5
-            let centerY = geo.size.height * 0.5
-            let normalized = min(max(sideDistance, 60), 220)
-            let previewDistance = 42 + ((normalized - 60) / 160) * 58
+            let collapsedWidth: CGFloat = 600
+            let collapsedHeight: CGFloat = 36
+            let horizontalInset: CGFloat = 18
+            let verticalInset: CGFloat = 8
+            let scale = min(
+                max((geo.size.width - (horizontalInset * 2)) / collapsedWidth, 0.01),
+                max((geo.size.height - (verticalInset * 2)) / collapsedHeight, 0.01)
+            )
+
+            let frameWidth = collapsedWidth * scale
+            let frameHeight = collapsedHeight * scale
+            let frameCenterX = geo.size.width * 0.5
+            let frameCenterY = geo.size.height * 0.5
+
+            let normalizedArtwork = min(max(artworkDistance, 60), 220)
+            let normalizedEq = min(max(equalizerDistance, 60), 220)
+            let normalizedArtworkSize = min(max(artworkSize, 24), 42)
+            let normalizedEqScale = min(max(equalizerScale, 0.75), 1.8)
+            let normalizedNotchOffset = min(max(notchCenterOffsetX, -140), 140)
+            let normalizedNotchWidth = min(max(notchReferenceWidth, 120), 240)
+
+            let scaledOffset = normalizedNotchOffset * scale
+            let notchCenterX = (frameWidth * 0.5) + scaledOffset
+            let previewArtworkDistance = normalizedArtwork * scale
+            let previewEqDistance = normalizedEq * scale
+            let previewArtworkSize = max(normalizedArtworkSize * scale, 10)
+            let previewEqWidth = max(16 * scale, 8)
+            let previewEqHeight = max(14 * scale, 7)
+            let previewNotchWidth = normalizedNotchWidth * scale
+            let previewNotchHeight = max(22 * scale, 10)
 
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.black.opacity(0.4))
 
-                Capsule()
-                    .fill(Color.black.opacity(0.9))
-                    .frame(width: 120, height: 22)
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
-                    )
-                    .position(x: centerX, y: centerY)
+                ZStack {
+                    Capsule()
+                        .fill(Color.black.opacity(0.9))
+                        .frame(width: previewNotchWidth, height: previewNotchHeight)
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
+                        )
+                        .position(x: frameWidth * 0.5, y: frameHeight * 0.5)
 
-                PreviewArtwork(image: artworkImage)
-                    .frame(width: 24, height: 24)
-                    .position(x: centerX - previewDistance, y: centerY)
+                    PreviewArtwork(image: artworkImage)
+                        .frame(width: previewArtworkSize, height: previewArtworkSize)
+                        .position(x: notchCenterX - previewArtworkDistance, y: frameHeight * 0.5)
 
-                PreviewBars(color: equalizerColor, isPlaying: isPlaying)
-                    .frame(width: 24, height: 14)
-                    .position(x: centerX + previewDistance, y: centerY)
+                    PreviewBars(color: equalizerColor, isPlaying: isPlaying)
+                        .frame(width: previewEqWidth, height: previewEqHeight)
+                        .scaleEffect(normalizedEqScale)
+                        .position(x: notchCenterX + previewEqDistance, y: frameHeight * 0.5)
+                }
+                .frame(width: frameWidth, height: frameHeight)
+                .position(x: frameCenterX, y: frameCenterY)
             }
         }
         .frame(height: 70)
@@ -495,25 +655,17 @@ private struct ColorPresetDot: View {
 
 private struct MiniEqualizerPreview: View {
     let color: Color
-    @State private var phase = false
-    private let heights: [CGFloat] = [0.5, 0.9, 0.65, 1.0, 0.7]
+    private let heights: [CGFloat] = [0.48, 0.78, 0.64, 0.86, 0.58]
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(0..<5, id: \.self) { i in
                 Capsule()
                     .fill(color)
-                    .frame(width: 2, height: 14 * heights[i] * (phase ? 1 : 0.3))
-                    .animation(
-                        Animation.easeInOut(duration: 0.4 + Double(i) * 0.06)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(i) * 0.08),
-                        value: phase
-                    )
+                    .frame(width: 2, height: 14 * heights[i])
             }
         }
         .frame(width: 24, height: 14)
-        .onAppear { phase = true }
     }
 }
 

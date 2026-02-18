@@ -1,6 +1,14 @@
 import SwiftUI
 import AppKit
 
+private enum NotchMotion {
+    static let expansion = Animation.easeInOut(duration: 0.24)
+    static let panelSwitch = Animation.spring(response: 0.30, dampingFraction: 0.90, blendDuration: 0.10)
+    static let emphasis = Animation.spring(response: 0.24, dampingFraction: 0.90)
+    static let quickFade = Animation.easeOut(duration: 0.18)
+    static let hover = Animation.easeOut(duration: 0.16)
+}
+
 struct NotchContentView: View {
     @EnvironmentObject private var spotify: SpotifyBridge
     @EnvironmentObject private var settings: AppSettings
@@ -29,7 +37,7 @@ struct NotchContentView: View {
 
                 if activePanel == .music && expansionProgress > 0.06 {
                     ExpandedMusicPanel(onSettingsTap: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.9, blendDuration: 0.08)) {
+                        withAnimation(NotchMotion.panelSwitch) {
                             activePanel = .settings
                         }
                     })
@@ -52,8 +60,8 @@ struct NotchContentView: View {
                     .offset(x: 12 * (1 - expansionProgress))
                 }
             }
-            .animation(.easeInOut(duration: 0.24), value: expansionProgress)
-            .animation(.spring(response: 0.3, dampingFraction: 0.9, blendDuration: 0.1), value: activePanel)
+            .animation(NotchMotion.expansion, value: expansionProgress)
+            .animation(NotchMotion.panelSwitch, value: activePanel)
             .onChange(of: expanded) { isExpanded in
                 activePanel = isExpanded ? .music : .none
             }
@@ -69,18 +77,25 @@ private struct CollapsedSideElements: View {
         GeometryReader { geo in
             let centerX = geo.size.width * 0.5
             let centerY = geo.size.height * 0.5
+            let notchCenterX = centerX + settings.notchCenterOffsetX
+            let artworkSize = settings.collapsedArtworkSize
+            let equalizerScale = settings.collapsedEqualizerScale
 
             ZStack {
-                ArtworkThumb(image: spotify.artworkImage)
-                    .frame(width: 28, height: 28)
-                    .position(x: centerX - settings.sideDistance, y: centerY)
+                ArtworkThumb(
+                    image: spotify.artworkImage,
+                    isPlaying: spotify.currentTrack.isPlaying
+                )
+                    .frame(width: artworkSize, height: artworkSize)
+                    .position(x: notchCenterX - settings.artworkDistance, y: centerY)
 
                 MusicBarsView(
                     isPlaying: spotify.currentTrack.isPlaying,
-                    color: settings.equalizerColor
+                    color: settings.resolvedEqualizerColor(from: spotify.artworkDominantColor)
                 )
                 .frame(width: 16, height: 14)
-                .position(x: centerX + settings.sideDistance, y: centerY)
+                .scaleEffect(equalizerScale)
+                .position(x: notchCenterX + settings.equalizerDistance, y: centerY)
             }
         }
     }
@@ -88,6 +103,7 @@ private struct CollapsedSideElements: View {
 
 private struct ExpandedMusicPanel: View {
     @EnvironmentObject private var spotify: SpotifyBridge
+    @EnvironmentObject private var settings: AppSettings
 
     @State private var seekValue: Double = 0
     @State private var isSeeking = false
@@ -99,6 +115,27 @@ private struct ExpandedMusicPanel: View {
 
     private var displayedPosition: Double {
         isSeeking ? seekValue : spotify.currentTrack.position
+    }
+    
+    private var panelFillStyle: AnyShapeStyle {
+        switch settings.panelBackgroundStyle {
+        case .black:
+            return AnyShapeStyle(Color.black.opacity(0.97))
+        case .glass:
+            return AnyShapeStyle(.ultraThinMaterial)
+        }
+    }
+    
+    private var panelFillOpacity: Double {
+        settings.panelBackgroundStyle == .glass ? 0.68 : 1.0
+    }
+    
+    private var panelStrokeOpacity: Double {
+        settings.panelBackgroundStyle == .glass ? 0.2 : 0.08
+    }
+    
+    private var panelTopGlowOpacity: Double {
+        settings.panelBackgroundStyle == .glass ? 0.18 : 0.1
     }
 
     var body: some View {
@@ -201,7 +238,7 @@ private struct ExpandedMusicPanel: View {
                         Spacer()
 
                         Button {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                            withAnimation(NotchMotion.panelSwitch) {
                                 isVolumeOpen.toggle()
                             }
                         } label: {
@@ -254,14 +291,15 @@ private struct ExpandedMusicPanel: View {
         }
         .background(
             TopAttachedPanelShape(topRadius: 14, bottomRadius: 34)
-                .fill(Color.black.opacity(0.97))
+                .fill(panelFillStyle)
+                .opacity(panelFillOpacity)
                 .overlay(
                     TopAttachedPanelShape(topRadius: 14, bottomRadius: 34)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 0.9)
+                        .stroke(Color.white.opacity(panelStrokeOpacity), lineWidth: 0.9)
                 )
                 .overlay(alignment: .top) {
                     LinearGradient(
-                        colors: [Color.white.opacity(0.1), Color.clear],
+                        colors: [Color.white.opacity(panelTopGlowOpacity), Color.clear],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -273,7 +311,9 @@ private struct ExpandedMusicPanel: View {
         .onAppear {
             seekValue = spotify.currentTrack.position
             volumeValue = spotify.volume
-            spotify.refreshNow()
+            DispatchQueue.main.async {
+                spotify.refreshNow()
+            }
         }
         .onChange(of: spotify.currentTrack.position) { newValue in
             guard !isSeeking else { return }
@@ -380,6 +420,7 @@ private struct SeekBar: View {
 
 private struct ArtworkThumb: View {
     let image: NSImage?
+    let isPlaying: Bool
 
     var body: some View {
         Group {
@@ -399,6 +440,11 @@ private struct ArtworkThumb: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
         )
+        .scaleEffect(isPlaying ? 1.0 : 0.93)
+        .saturation(isPlaying ? 1.0 : 0.7)
+        .brightness(isPlaying ? 0.0 : -0.03)
+        .opacity(isPlaying ? 1.0 : 0.9)
+        .animation(NotchMotion.quickFade, value: isPlaying)
     }
 }
 
@@ -428,7 +474,7 @@ private struct ArtworkLarge: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .compositingGroup()
         .scaleEffect(isPlaying ? 1.0 : 0.92)
-        .animation(.spring(response: 0.26, dampingFraction: 0.92), value: isPlaying)
+        .animation(NotchMotion.emphasis, value: isPlaying)
         .overlay(alignment: .bottomTrailing) {
             if showSpotifyBadge {
                 SpotifyBadge(isActive: badgeIsActive)
@@ -468,7 +514,7 @@ private struct SpotifyBadge: View {
         .scaleEffect(isActive ? 1.0 : 0.94)
         .saturation(isActive ? 1.0 : 0.45)
         .opacity(isActive ? 1.0 : 0.9)
-        .animation(.easeOut(duration: 0.2), value: isActive)
+        .animation(NotchMotion.quickFade, value: isActive)
         .shadow(color: .black.opacity(0.28), radius: 2, x: 0, y: 1)
     }
 }
@@ -486,7 +532,7 @@ private struct Control: View {
                 .font(.system(size: size, weight: .semibold))
                 .foregroundColor(.white.opacity(hovered ? 0.98 : 0.84))
                 .scaleEffect(hovered ? 1.08 : 1.0)
-                .animation(.easeOut(duration: 0.14), value: hovered)
+                .animation(NotchMotion.hover, value: hovered)
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
@@ -500,25 +546,37 @@ private struct MusicBarsView: View {
     private let heights: [CGFloat] = [0.82, 0.95, 1.0, 0.93]
     private let durations: [Double] = [1.14, 0.9, 0.82, 1.08]
     private let amplitudes: [CGFloat] = [0.18, 0.33, 0.36, 0.2]
-    private let idleScale: CGFloat = 0.46
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
 
-            HStack(alignment: .center, spacing: 2.2) {
-                ForEach(0..<heights.count, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 1.1, style: .continuous)
-                        .fill(color.opacity(0.92))
-                        .frame(width: 2.0, height: 12 * heights[i] * barScale(for: i, at: time))
+            ZStack {
+                HStack(alignment: .center, spacing: 2.2) {
+                    ForEach(0..<heights.count, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 1.1, style: .continuous)
+                            .fill(color.opacity(0.92))
+                            .frame(width: 2.0, height: 12 * heights[i] * barScale(for: i, at: time))
+                    }
                 }
+                .opacity(isPlaying ? 1 : 0)
+                .scaleEffect(isPlaying ? 1.0 : 0.92)
+
+                HStack(alignment: .center, spacing: 2.2) {
+                    ForEach(0..<4, id: \.self) { i in
+                        Circle()
+                            .fill(color.opacity([0.38, 0.62, 0.62, 0.38][i]))
+                            .frame(width: 2.4, height: 2.4)
+                    }
+                }
+                .opacity(isPlaying ? 0 : 1)
+                .scaleEffect(isPlaying ? 0.92 : 1.0)
             }
+            .animation(.easeInOut(duration: 0.12), value: isPlaying)
         }
     }
 
     private func barScale(for index: Int, at time: TimeInterval) -> CGFloat {
-        guard isPlaying else { return idleScale }
-
         let primary = sin((time / durations[index] + Double(index) * 0.23) * 2 * .pi)
         let secondary = sin((time / (durations[index] * 0.61) + Double(index) * 0.41) * 2 * .pi)
         let mixed = ((primary * 0.72) + (secondary * 0.28) + 1) * 0.5
