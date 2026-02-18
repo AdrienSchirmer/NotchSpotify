@@ -1,40 +1,41 @@
 # NotchSpotify
 
-MVP ultra-basico para macOS: un notch flotante con informacion y controles de Spotify.
+Basic MVP for macOS: a floating notch with Spotify information and controls.
 
-## Objetivo de esta version (v1)
-- Codigo minimo
-- Sin dependencias externas
-- Bajo uso de CPU/RAM
-- Base clara para iterar
+## Objective of this version (v1)
+- Minimal code  
+- No external dependencies  
+- Low CPU/RAM usage  
+- Clear base to iterate on  
 
-## Que hace
-- Panel tipo notch siempre arriba (center-top)
-- Estado colapsado al iniciar
-- Expande en hover
-- Muestra track/artist/artwork
-- Controles: previous, play/pause, next
-- Integracion con Spotify via AppleScript (sin API keys)
+## What it does
+- Always-on-top notch-style panel (center-top)  
+- Starts in collapsed state  
+- Expands on hover  
+- Displays track/artist/artwork  
+- Controls: previous, play/pause, next  
+- Spotify integration via AppleScript (no API keys required)  
 
-## Optimizaciones aplicadas
-- Polling cada `2.0s` (menos CPU que refresco agresivo)
-- Solo actualiza UI cuando cambia el track
-- Solo descarga artwork cuando cambia la URL
-- Sin capas extra de configuracion en runtime
+## Applied optimizations
+- Polling every `2.0s` (lower CPU usage than aggressive refresh)  
+- UI updates only when the track changes  
+- Artwork downloads only when the URL changes  
+- No extra runtime configuration layers  
 
-## Estructura principal
+## Main structure
 - `/Users/adrien/Desktop/NotchSpotify/NotchSpotify/Sources/NotchSpotifyApp.swift`
 - `/Users/adrien/Desktop/NotchSpotify/NotchSpotify/Sources/NotchWindowController.swift`
 - `/Users/adrien/Desktop/NotchSpotify/NotchSpotify/Sources/NotchContentView.swift`
 - `/Users/adrien/Desktop/NotchSpotify/NotchSpotify/Sources/SpotifyBridge.swift`
 
-## Ejecutar
-1. Abrir `/Users/adrien/Desktop/NotchSpotify/NotchSpotify.xcodeproj` en Xcode
-2. Seleccionar target `NotchSpotify` y un Team valido
-3. Run (`Cmd + R`)
-4. Aceptar permiso de automatizacion cuando macOS lo pida
+## Run
+1. Open `/Users/adrien/Desktop/NotchSpotify/NotchSpotify.xcodeproj` in Xcode  
+2. Select the `NotchSpotify` target and a valid Team  
+3. Run (`Cmd + R`)  
+4. Accept the automation permission when macOS prompts you  
 
-## Siguiente iteracion sugerida
-1. Atajo global para mostrar/ocultar notch
-2. Config minima (tamano, delay hover)
-3. Deteccion multi-monitor mas robusta
+## Funny
+All this project has been done with claude+codex, it's my first time vibecoding and im kinda vibin' with it.
+
+## EXTRA
+This project has been tested on my macbook pro m4 of 14 inches, there can be size problems with other monitors since i didn't develop on them yet!
