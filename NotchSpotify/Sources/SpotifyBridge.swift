@@ -53,15 +53,16 @@ final class SpotifyBridge: ObservableObject {
     private var isUserInteractionActive = false
     private var interactionBoostUntil: Date = .distantPast
     private var workspaceObservers: [NSObjectProtocol] = []
+    private var distributedObservers: [NSObjectProtocol] = []
     
     private let pollIntervalPlayingInteractive: TimeInterval = 0.55
-    private let pollIntervalPlayingPassive: TimeInterval = 1.2
-    private let pollIntervalPausedInteractive: TimeInterval = 1.05
-    private let pollIntervalPausedPassive: TimeInterval = 3.4
+    private let pollIntervalPlayingPassive: TimeInterval = 0.72
+    private let pollIntervalPausedInteractive: TimeInterval = 0.82
+    private let pollIntervalPausedPassive: TimeInterval = 1.35
     private let pollIntervalNotRunningInteractive: TimeInterval = 1.8
     private let pollIntervalNotRunningPassive: TimeInterval = 5.0
     private let progressTickInterval: TimeInterval = 0.1
-    private let transientNoTrackGraceInterval: TimeInterval = 1.8
+    private let transientNoTrackGraceInterval: TimeInterval = 1.2
 
     nonisolated private static let payloadSeparator = "|||NSP_SEP|||"
     nonisolated private static let spotifyBundleID = "com.spotify.client"
@@ -70,11 +71,15 @@ final class SpotifyBridge: ObservableObject {
     static let shared = SpotifyBridge()
     private init() {
         registerWorkspaceObservers()
+        registerDistributedObservers()
     }
     
     deinit {
-        let center = NSWorkspace.shared.notificationCenter
-        workspaceObservers.forEach(center.removeObserver)
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        workspaceObservers.forEach(workspaceCenter.removeObserver)
+
+        let distributedCenter = DistributedNotificationCenter.default()
+        distributedObservers.forEach(distributedCenter.removeObserver)
     }
 
     var isSpotifyRunning: Bool {
@@ -532,6 +537,33 @@ final class SpotifyBridge: ObservableObject {
         workspaceObservers = [launchObserver, terminateObserver, wakeObserver]
     }
 
+    private func registerDistributedObservers() {
+        let center = DistributedNotificationCenter.default()
+        let names: [Notification.Name] = [
+            Notification.Name("com.spotify.client.PlaybackStateChanged"),
+            Notification.Name("com.spotify.client.playerInfo"),
+            Notification.Name("com.spotify.client.PlayerStateChanged")
+        ]
+
+        distributedObservers = names.map { name in
+            center.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.handleDistributedSpotifyNotification()
+                }
+            }
+        }
+    }
+
+    private func handleDistributedSpotifyNotification() {
+        guard isSpotifyRunning else { return }
+        boostPolling(for: 8.0)
+        scheduleFetchState()
+    }
+
     private func handleWorkspaceNotification(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
             return
@@ -546,9 +578,10 @@ final class SpotifyBridge: ObservableObject {
 
     private func updatePollTimer(interval: TimeInterval) {
         guard interval > 0 else { return }
+        let toleranceFactor = pollToleranceFactor(for: interval)
 
         if let timer = pollTimer, abs(currentPollInterval - interval) < 0.02 {
-            timer.tolerance = interval * 0.28
+            timer.tolerance = interval * toleranceFactor
             return
         }
 
@@ -559,10 +592,20 @@ final class SpotifyBridge: ObservableObject {
                 self?.scheduleFetchState()
             }
         }
-        timer.tolerance = interval * 0.28
+        timer.tolerance = interval * toleranceFactor
 
         pollTimer = timer
         currentPollInterval = interval
+    }
+
+    private func pollToleranceFactor(for interval: TimeInterval) -> Double {
+        if interval <= 1.0 {
+            return 0.10
+        }
+        if interval <= 2.0 {
+            return 0.14
+        }
+        return 0.22
     }
 
     private func updateProgressTimer(isActive: Bool) {
