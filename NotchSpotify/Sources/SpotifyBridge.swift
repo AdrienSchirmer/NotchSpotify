@@ -61,7 +61,7 @@ final class SpotifyBridge: ObservableObject {
     private let pollIntervalNotRunningInteractive: TimeInterval = 1.8
     private let pollIntervalNotRunningPassive: TimeInterval = 5.0
     private let progressTickInterval: TimeInterval = 0.1
-    private let transientNoTrackGraceInterval: TimeInterval = 0.7
+    private let transientNoTrackGraceInterval: TimeInterval = 1.8
 
     nonisolated private static let payloadSeparator = "|||NSP_SEP|||"
     nonisolated private static let spotifyBundleID = "com.spotify.client"
@@ -249,7 +249,15 @@ final class SpotifyBridge: ObservableObject {
     }
 
     private func scheduleFetchState() {
-        guard isSpotifyRunning else {
+        let spotifyRunning = isSpotifyRunning
+        guard spotifyRunning else {
+            if shouldDeferNoTrackTransition() {
+                applyCurrentEnergyPolicy(track: currentTrack)
+                debugStatus = "Spotify transition (process check)"
+                boostPolling(for: 2.0)
+                return
+            }
+
             isFetchingState = false
             hasQueuedFetch = false
             fetchFailureCount = 0
@@ -313,6 +321,14 @@ final class SpotifyBridge: ObservableObject {
         fetchFailureCount = 0
 
         if result == "NOTRUNNING" {
+            if isSpotifyRunning {
+                transientNoTrackStartedAt = nil
+                applyCurrentEnergyPolicy(track: currentTrack)
+                debugStatus = "Spotify transition (probe mismatch)"
+                boostPolling(for: 2.0)
+                return
+            }
+
             if shouldDeferNoTrackTransition() {
                 applyCurrentEnergyPolicy(track: currentTrack)
                 debugStatus = "Spotify transition (not running)"
@@ -692,7 +708,7 @@ final class SpotifyBridge: ObservableObject {
     }
 
     private func shouldDeferNoTrackTransition() -> Bool {
-        guard isSpotifyRunning, currentTrack != .empty else {
+        guard currentTrack != .empty else {
             transientNoTrackStartedAt = nil
             return false
         }
