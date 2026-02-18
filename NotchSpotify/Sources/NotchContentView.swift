@@ -497,15 +497,16 @@ private struct MusicBarsView: View {
     let isPlaying: Bool
     let color: Color
 
-    private let heights: [CGFloat] = [0.44, 0.78, 1.0, 0.68]
-    private let durations: [Double] = [0.92, 0.76, 0.64, 0.82]
-    private let idleScale: CGFloat = 0.26
+    private let heights: [CGFloat] = [0.82, 0.95, 1.0, 0.93]
+    private let durations: [Double] = [1.14, 0.9, 0.82, 1.08]
+    private let amplitudes: [CGFloat] = [0.18, 0.33, 0.36, 0.2]
+    private let idleScale: CGFloat = 0.46
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: !isPlaying)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
 
-            HStack(alignment: .bottom, spacing: 2.2) {
+            HStack(alignment: .center, spacing: 2.2) {
                 ForEach(0..<heights.count, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 1.1, style: .continuous)
                         .fill(color.opacity(0.92))
@@ -518,7 +519,9 @@ private struct MusicBarsView: View {
     private func barScale(for index: Int, at time: TimeInterval) -> CGFloat {
         guard isPlaying else { return idleScale }
 
-        let wave = (sin((time / durations[index] + Double(index) * 0.27) * 2 * .pi) + 1) * 0.5
-        return 0.36 + (0.64 * CGFloat(wave))
+        let primary = sin((time / durations[index] + Double(index) * 0.23) * 2 * .pi)
+        let secondary = sin((time / (durations[index] * 0.61) + Double(index) * 0.41) * 2 * .pi)
+        let mixed = ((primary * 0.72) + (secondary * 0.28) + 1) * 0.5
+        return 0.62 + (amplitudes[index] * CGFloat(mixed))
     }
 }
